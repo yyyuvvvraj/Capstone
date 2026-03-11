@@ -10,7 +10,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Zap,
-  Clock
+  Clock,
+  ChevronLeft
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -32,24 +33,66 @@ const AdminDashboard = () => {
 
     const [selectedUser, setSelectedUser] = useState(null);
     const [alerts, setAlerts] = useState([]);
+    
+    // Mock chart data to render charts cleanly
+    const chartData = [
+        { name: '08:00', score: 85 },
+        { name: '10:00', score: 82 },
+        { name: '12:00', score: 88 },
+        { name: '14:00', score: 90 },
+        { name: '16:00', score: 87 },
+        { name: '18:00', score: 85 },
+    ];
 
-    const fetchAlerts = async () => {
+    const fetchDashboardData = async () => {
+        setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/admin/alerts');
-            const data = await res.json();
-            setAlerts(data);
-        } catch (err) { console.error(err); }
+            const token = localStorage.getItem('token');
+            const headers = { 'Authorization': `Bearer ${token}` };
+            
+            const [statsRes, usersRes, alertsRes] = await Promise.all([
+                fetch('http://localhost:5000/api/admin/stats', { headers }),
+                fetch('http://localhost:5000/api/admin/users', { headers }),
+                fetch('http://localhost:5000/api/admin/alerts', { headers })
+            ]);
+            
+            if (statsRes.ok) setStats(await statsRes.json());
+            if (usersRes.ok) setUsers(await usersRes.json());
+            if (alertsRes.ok) setAlerts(await alertsRes.json());
+            
+        } catch (err) {
+            console.error("Error fetching dashboard data:", err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
-        if (view === 'alerts') fetchAlerts();
-    }, [view]);
+        fetchDashboardData();
+        const interval = setInterval(fetchDashboardData, 10000); // refresh every 10s
+        return () => clearInterval(interval);
+    }, []);
 
     const killSession = async (sessionId) => {
         if (!confirm('Are you sure you want to terminate this session?')) return;
-        // Mock kill logic for demo
-        alert('Session terminated successfully.');
-        setStats(prev => ({ ...prev, activeSessions: prev.activeSessions - 1 }));
+        
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:5000/api/admin/sessions/${sessionId}/kill`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (res.ok) {
+                alert('Session terminated successfully.');
+                setStats(prev => ({ ...prev, activeSessions: Math.max(0, prev.activeSessions - 1) }));
+                fetchDashboardData();
+            } else {
+                alert('Failed to terminate session.');
+            }
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const renderAlerts = () => (

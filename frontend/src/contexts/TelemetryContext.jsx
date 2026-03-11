@@ -114,7 +114,7 @@ export const TelemetryProvider = ({ children }) => {
         });
 
         // Batch Sender
-        const interval = setInterval(() => {
+        const batchInterval = setInterval(() => {
             if (batchRef.current.length > 0) {
                 const eventsToSend = [...batchRef.current];
                 batchRef.current = [];
@@ -139,7 +139,7 @@ export const TelemetryProvider = ({ children }) => {
             window.removeEventListener('copy', handleCopy);
             window.removeEventListener('paste', handlePaste);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            clearInterval(interval);
+            clearInterval(batchInterval);
             if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
         };
     }, [token, sessionId]);
