@@ -8,10 +8,19 @@ const NUM_FEATURES = 3;
 // Initialize the sequential model
 const model = tf.sequential();
 
-// Add the LSTM layer
+// Add a 1D CNN layer to extract local temporal features (e.g., specific movement patterns)
+model.add(tf.layers.conv1d({
+    inputShape: [SEQUENCE_LENGTH, NUM_FEATURES],
+    kernelSize: 3,
+    filters: 32,
+    strides: 1,
+    activation: 'relu',
+    padding: 'same'
+}));
+
+// Add the LSTM layer to capture long-term dependencies from the CNN features
 model.add(tf.layers.lstm({
     units: 32,
-    inputShape: [SEQUENCE_LENGTH, NUM_FEATURES],
     returnSequences: false
 }));
 
@@ -31,13 +40,13 @@ model.compile({
 const weightsPath = path.resolve(__dirname, 'lstm_weights.json');
 try {
     if (fs.existsSync(weightsPath)) {
-        console.log('Loading pre-trained robust LSTM engine weights...');
+        console.log('Loading pre-trained robust CNN-LSTM engine weights...');
         const rawData = fs.readFileSync(weightsPath, 'utf8');
         const weightsData = JSON.parse(rawData);
         
         const tfWeights = weightsData.map(w => tf.tensor(w.data, w.shape));
         model.setWeights(tfWeights);
-        console.log('LSTM engine initialized and ready.');
+        console.log('CNN-LSTM engine initialized and ready.');
     } else {
         console.warn('WARNING: lstm_weights.json not found! Model is using untrained initialized weights.');
     }
@@ -115,7 +124,7 @@ async function predictSequence(events) {
         prediction.dispose();
         
         const finalScore = scoreArray[0];
-        console.log(`LSTM Anomaly Score Evaluated: ${finalScore}`);
+        console.log(`CNN-LSTM Anomaly Score Evaluated: ${finalScore}`);
         return finalScore;
     } catch (err) {
         console.error('LSTM Prediction Error:', err);
