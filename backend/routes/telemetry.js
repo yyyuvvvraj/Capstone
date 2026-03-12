@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../database');
+const lstmModel = require('../lstmModel');
 
 const router = express.Router();
 
@@ -51,12 +52,38 @@ router.post('/capture', verifySession, (req, res) => {
                     [req.session.user_id, sessionId, 'Sensitive data clipboard usage', 'low']);
             }
         });
-        db.run("COMMIT", (err) => {
+        db.run("COMMIT", async (err) => {
             if (err) {
                 console.error('Failed to commit telemetry batch', err);
                 // Even if some batch failed, we just respond OK to not block the frontend
                 return res.json({ success: false, error: 'Database transaction failed' });
             }
+            
+            // --- LSTM Anomaly Inference ---
+            // After successful commit, fetch the latest 20 events to evaluate the sequence.
+            db.all('SELECT * FROM behavioral_logs WHERE session_id = ? ORDER BY timestamp DESC LIMIT 20', [sessionId], async (err, rows) => {
+                if (!err && rows && rows.length >= 5) { // Evaluate if we have at least 5 events
+                    // Reverse to chronological order
+                    const sequence = rows.reverse().map(r => ({
+                        type: r.type,
+                        data: JSON.parse(r.data),
+                        timestamp: new Date(r.timestamp).getTime()
+                    }));
+                    
+                    try {
+                        const score = await lstmModel.predictSequence(sequence);
+                        console.log(`LSTM Anomaly Score: ${score}`);
+                        // If score is above threshold, log it as an anomaly
+                        if (score > 0.4) {
+                            db.run('INSERT INTO threat_alerts (user_id, session_id, reason, severity) VALUES (?, ?, ?, ?)', 
+                                [req.session.user_id, sessionId, `LSTM model detected anomalous behavior (score: ${score.toFixed(2)})`, 'high']);
+                        }
+                    } catch (e) {
+                        console.error('Failed to run LSTM prediction', e);
+                    }
+                }
+            });
+
             res.json({ success: true, count: events.length });
         });
     });
